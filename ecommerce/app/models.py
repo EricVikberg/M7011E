@@ -1,13 +1,15 @@
 from django.contrib.auth.base_user import BaseUserManager
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 
 # Create your models here.
 
 USER_TYPE_CHOICES = (
-    (1, 'Admin'),
-    (2, 'SuperUser'),
-    (3, 'User'),
+    (1, 'SuperUser'),
+    (2, 'Staff'),
+    (3, 'Customer'),
 )
 
 class CustomUserManager(BaseUserManager):
@@ -40,13 +42,52 @@ class User(AbstractUser):
     user_type = models.PositiveSmallIntegerField(choices=USER_TYPE_CHOICES, default=3)
     is_deleted = models.BooleanField(default=False)
 
+    is_staff = models.BooleanField(default=False)
+    is_superuser = models.BooleanField(default=False)
+
     objects = CustomUserManager()
 
     REQUIRED_FIELDS = ['email']  # Required when creating superuser
     USERNAME_FIELD = 'username'  # Username used for login
 
+    def save(self, *args, **kwargs):
+        # Uppdatera user_type baserat på is_staff och is_superuser
+        if self.is_superuser:
+            self.user_type = 1  # SuperUser
+        elif self.is_staff:
+            self.user_type = 2  # Staff
+        else:
+            self.user_type = 3  # Customer
+
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return self.username
+
+
+
+    @property
+    def is_customer(self):
+        return self.user_type == 3
+
+class UserProfile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile', primary_key=True)
+    phone_number = models.CharField(max_length=20, unique=True, null=True)
+    address = models.CharField(blank=True, null=True)
+    date_of_birth = models.DateField(blank=True, null=True)
+    loyalty_points = models.IntegerField(default=0)
+
+@receiver(post_save, sender=User)
+def create_user_profile(sender, instance, created, **kwargs):
+    """Auto-create profile when new user registers"""
+    if created:
+        UserProfile.objects.create(user=instance)
+
+@receiver(post_save, sender=User)
+def save_user_profile(sender, instance, **kwargs):
+    """Auto-save profile when user is saved"""
+    if hasattr(instance, 'profile'):
+        instance.profile.save()
 
 class Product(models.Model):
     product_id = models.AutoField(primary_key=True)
@@ -54,6 +95,16 @@ class Product(models.Model):
     price = models.FloatField()
     stock = models.IntegerField()
     product_info = models.TextField()
+
+    def __str__(self):
+        return self.product_name
+
+class Category(models.Model):
+    name = models.CharField(max_length=50, unique=True)
+    products = models.ManyToManyField(Product, related_name='categories', blank=True)  # Add `blank=True`
+
+    def __str__(self):
+        return self.name
 
 class Review(models.Model):
     review_id = models.AutoField(primary_key=True)

@@ -1,11 +1,29 @@
 from rest_framework import serializers
-from app.models import Product, CartItem, Cart, OrderItem, Order
+from django.contrib.auth import authenticate
+from app.models import Product, CartItem, Cart, OrderItem, Order, User, UserProfile, Category
 
 
 class ProductSerializer(serializers.ModelSerializer):
+    categories = serializers.SlugRelatedField(
+        many=True,
+        read_only=True,
+        slug_field='name'  # Visar bara kategorinamnen
+    )
+
     class Meta:
         model = Product
         fields = '__all__'
+
+class CategorySerializer(serializers.ModelSerializer):
+    products = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=Product.objects.all(),
+        required=False,
+        read_only=False  # Endast staff kan ändra detta via API
+    )
+    class Meta:
+        model = Category
+        fields = ['id', 'name', 'products']
 
 class CartItemSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source='product.name', read_only=True)
@@ -18,7 +36,8 @@ class CartItemSerializer(serializers.ModelSerializer):
         fields = ['id', 'product', 'product_name',
                   'product_price', 'quantity', 'price', 'available_stock', 'total_price']
         extra_kwargs = {'product':{'required':True},
-                        'quantity':{'min_value':1}
+                        'quantity':{'min_value':1},
+                        'price':{'read_only':True}
         }
 
     def get_available_stock(self, obj):
@@ -71,6 +90,7 @@ class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
     user_email = serializers.EmailField(source='user.email', read_only=True)
     total_price = serializers.SerializerMethodField()
+
     class Meta:
         model = Order
         fields = ['order_id', 'user', 'user_email','total_price', 'created_at', 'updated_at', 'items']
@@ -78,3 +98,67 @@ class OrderSerializer(serializers.ModelSerializer):
 
     def get_total_price(self, obj):
         return sum(item.total_price for item in obj.items.all())
+
+class UserSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True)
+    email = serializers.EmailField(required=True)
+    user_type_display = serializers.CharField(source='get_user_type_display', read_only=True)
+
+    class Meta:
+        model = User
+        fields = [
+            'id', 'username', 'email', 'password',
+            'user_type', 'user_type_display', 'first_name',
+            'last_name','date_joined'
+        ]
+        extra_kwargs = {
+            'password': {'write_only': True},
+            'user_type': {'read_only': True},
+            'email' : {'required': True},
+        }
+
+    def validate_email(self, value):
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("This email is already in use")
+        return value
+
+    def create(self, validated_data):
+        user = User.objects.create_user(
+            username=validated_data['username'],
+            email=validated_data['email'],
+            password=validated_data['password'],
+            user_type=validated_data.get('user_type', 3),
+        )
+        return user
+
+class UserProfileSerializer(serializers.ModelSerializer):
+    email = serializers.EmailField(source='user.email', read_only=True)
+    username = serializers.CharField(source='user.username', read_only=True)
+
+    class Meta:
+        model = UserProfile
+        fields = ['phone_number', 'address', 'date_of_birth', 'loyalty_points',
+                  'email', 'username']
+        read_only_fields = ['loyalty_points']
+
+class LoginSerializer(serializers.Serializer):
+    username = serializers.CharField()
+    password = serializers.CharField(write_only=True)
+
+    def validate(self, data):
+        username=data.get('username')
+        password=data.get('password')
+
+        if not password:
+            raise serializers.ValidationError("Password is required!")
+
+        if username:
+            user = authenticate(username=username, password=password)
+        else:
+            raise serializers.ValidationError("Username is required!")
+
+        if not user:
+            raise serializers.ValidationError("Invalid credentials")
+        if not user.is_active:
+            raise serializers.ValidationError("User is not active")
+        return user
