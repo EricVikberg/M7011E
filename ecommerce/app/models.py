@@ -37,11 +37,11 @@ class CustomUserManager(BaseUserManager):
 
         return self.create_user(username, email, password, **extra_fields)
 
+
 class User(AbstractUser):
     email = models.EmailField(unique=True)
     user_type = models.PositiveSmallIntegerField(choices=USER_TYPE_CHOICES, default=3)
     is_deleted = models.BooleanField(default=False)
-
     is_staff = models.BooleanField(default=False)
     is_superuser = models.BooleanField(default=False)
 
@@ -105,13 +105,6 @@ class Category(models.Model):
 
     def __str__(self):
         return self.name
-
-class Review(models.Model):
-    review_id = models.AutoField(primary_key=True)
-    product = models.ForeignKey(Product, on_delete=models.CASCADE)
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    grade = models.IntegerField()
-    comment = models.TextField()
 
 class Cart(models.Model):
     cart_id = models.AutoField(primary_key=True)

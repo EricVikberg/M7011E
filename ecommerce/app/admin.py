@@ -1,8 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from .models import User, Product, Review, UserProfile, Category
+from .models import User, Product, UserProfile, Category
 
-admin.site.register(Review)
 admin.site.register(UserProfile)
 
 

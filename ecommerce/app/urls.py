@@ -1,7 +1,7 @@
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 from .views import ProductViewSet, CartViewSet, CartItemViewSet, OrderViewset, RegisterView, CustomAuthToken, \
-    UserProfileViewSet, CategoryViewSet, LogoutView
+    UserProfileViewSet, CategoryViewSet, LogoutView, UserViewSet
 
 router = DefaultRouter()
 router.register(r'products', ProductViewSet, basename='products')
@@ -10,6 +10,8 @@ router.register(r'cart-items', CartItemViewSet, basename='cart-items')
 router.register(r'order', OrderViewset, basename='order')
 router.register(r'user-profile', UserProfileViewSet, basename='userprofile')
 router.register(r'categories', CategoryViewSet, basename='categories')
+router.register(r'user', UserViewSet, basename='user')
+
 
 urlpatterns = [
     path('register/', RegisterView.as_view(), name='register'),

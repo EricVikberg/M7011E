@@ -9,58 +9,75 @@ from rest_framework.authtoken.models import Token
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.views import APIView
 from rest_framework.authentication import TokenAuthentication
-from .models import Product, Cart, CartItem, Order, OrderItem, UserProfile, Category
-from .permissions import ReadOnlyOrStaff, CartPermission, OrderPermission, IsStaffOrSuperuser
+from .models import Product, Cart, CartItem, Order, OrderItem, UserProfile, Category, User
+from .permissions import ReadOnlyOrStaff, CartPermission, OrderPermission, IsStaffOrSuperuser, UserProfilePermission, \
+    UserAccessPermission
 from .serializers.serializer import (ProductSerializer, CartSerializer, CartItemSerializer,
                                      OrderSerializer, OrderItemSerializer, UserSerializer, LoginSerializer,
                                      UserProfileSerializer, CategorySerializer)
 
 
-class UserProfileViewSet(viewsets.ModelViewSet):
-    serializer_class = UserProfileSerializer
-    authentication_classes = [TokenAuthentication]
-    permission_classes = [IsAuthenticated]
-    http_method_names = ['get', 'patch', 'head', 'options']  # Disable PUT/create/delete
-    lookup_field = 'user__username'  # gör så att /user-profile/<username>/ fungerar
-    queryset = UserProfile.objects.select_related('user').all()
+class UserViewSet(viewsets.ModelViewSet):
+    """
+    API endpoint for managing users.
+    - Customers can view/update themselves
+    - Staff/superusers have full access
+    """
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated, UserAccessPermission]  # Använd vår nya permission
+    lookup_field = 'username'
 
     def get_queryset(self):
         user = self.request.user
-        if user.user_type in [1, 2]:  # SuperUser or Staff
-            return UserProfile.objects.select_related('user').all()
-        return UserProfile.objects.filter(user=user)
+        if user.user_type == 1:  # SuperUser can see everyone
+            return self.queryset.all()
+        elif user.user_type == 2:  # Staff can see everyone except superusers
+            return self.queryset.exclude(user_type=1)
+        # Customers can only see themselves
+        return self.queryset.filter(id=user.id)
 
-    def user(self, request, username=None):
-        try:
-            profile = UserProfile.objects.select_related('user').get(user__username=username)
-        except UserProfile.DoesNotExist:
-            raise NotFound("No profile found for that username")
+    def partial_update(self, request, *args, **kwargs):
+        user = self.get_object()
 
-        if request.method == 'GET':
-            serializer = self.get_serializer(profile)
-            return Response(serializer.data)
+        # Spceical handling of changing password
+        if 'password' in request.data:
 
-        elif request.method == 'PATCH':
-            serializer = self.get_serializer(profile, data=request.data, partial=True)
-            serializer.is_valid(raise_exception=True)
-            serializer.save()
-            return Response(serializer.data)
+            if not request.data['password']:
+                return Response(
+                    {"password": ["This field may not be blank."]},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
-    def get_object(self):
-        username = self.kwargs.get('user__username')
-        try:
-            profile = UserProfile.objects.select_related('user').get(user__username=username)
-        except UserProfile.DoesNotExist:
-            raise NotFound("No profile found for that username")
+            user.set_password(request.data['password'])
+            user.save()
 
+            if len(request.data) == 1:
+                return Response({"status": "password changed"})
+
+        return super().partial_update(request, *args, **kwargs)
+class UserProfileViewSet(viewsets.ModelViewSet):
+    """
+    API endpoint that allows user profiles to be viewed or edited.
+
+    Permissions:
+    - GET: All authenticated users can view profiles
+      - Users can only view their own profile unless staff/superuser
+    - PATCH: Users can edit their own profile, staff/superusers can edit any
+    - POST/PUT/DELETE: Disabled via permissions
+    """
+    serializer_class = UserProfileSerializer
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated, UserProfilePermission]  # Use custom permission
+    lookup_field = 'user__username'
+    queryset = UserProfile.objects.select_related('user').all()
+
+    def get_queryset(self):
+        """Filter queryset based on user permissions"""
         user = self.request.user
-        # Tillåt åtkomst om:
-        # 1. Användaren är superuser/staff, ELLER
-        # 2. Användaren försöker komma åt sin egen profil
-        if not (user.user_type in [1, 2] or profile.user == user):
-            raise PermissionDenied("You don't have permission to access this profile")
-
-        return profile
+        if user.user_type in [1, 2]:  # SuperUser or Staff
+            return self.queryset.all()
+        return self.queryset.filter(user=user)
 
 
 class ProductViewSet(viewsets.ModelViewSet):
@@ -100,16 +117,23 @@ class CartViewSet(viewsets.ModelViewSet):
     permission_classes = [CartPermission]
 
     def get_queryset(self):
-        """Return carts based on user/session"""
-        if self.request.user.is_authenticated:
-            print("Returning USER cart")
-            return self.queryset.filter(user=self.request.user)
+        """Return carts based on user permissions"""
+        user = self.request.user
+
+        # Staff/SuperUser can see all carts
+        if user.is_authenticated and user.user_type in [1, 2]:  # 1=SuperUser, 2=Staff
+            return self.queryset.all()
+
+        # Authenticated customers see only their own cart
+        elif user.is_authenticated:
+            return self.queryset.filter(user=user)
+
+        # Anonymous users see only their session-based cart
         else:
             session_key = self.request.session.session_key
             if not session_key:
                 self.request.session.create()
                 session_key = self.request.session.session_key
-            print("Returning ANONYMOUS cart")
             return self.queryset.filter(session_key=session_key)
 
     def create(self, request, *args, **kwargs):

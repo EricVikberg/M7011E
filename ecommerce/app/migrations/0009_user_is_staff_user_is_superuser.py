@@ -20,4 +20,13 @@ class Migration(migrations.Migration):
             name='is_superuser',
             field=models.BooleanField(default=False),
         ),
+        migrations.RemoveField(
+            model_name='user',
+            name='first_name',
+        ),
+        migrations.RemoveField(
+            model_name='user',
+            name='last_name',
+        ),
+
     ]

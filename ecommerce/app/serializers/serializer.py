@@ -52,12 +52,36 @@ class CategorySerializer(serializers.ModelSerializer):
     products = serializers.PrimaryKeyRelatedField(
         many=True,
         queryset=Product.objects.all(),
-        required=False,
-        read_only=False  # Endast staff kan ändra detta via API
+        required=False
     )
     class Meta:
         model = Category
         fields = ['id', 'name', 'products']
+
+    def update(self, instance, validated_data):
+
+        updated_products = validated_data.pop('products', [])
+
+        existing_products = set(instance.products.all())
+
+        for product in updated_products:
+            if product in existing_products:
+                instance.products.remove(product)
+            else:
+                instance.products.add(product)
+
+        return super().update(instance, validated_data)
+    def to_representation(self, instance):
+        """Customize the output format of the category"""
+        representation = super().to_representation(instance)
+        # Ersätt "products": [id, id, ...] med detaljer
+        representation['products'] = [
+            {
+                'id': product.product_id,
+                'name': product.product_name
+            } for product in instance.products.all()
+        ]
+        return representation
 
 class CartItemSerializer(serializers.ModelSerializer):
     """
@@ -168,13 +192,13 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'id', 'username', 'email', 'password',
-            'user_type', 'user_type_display', 'first_name',
-            'last_name','date_joined'
+            'user_type', 'user_type_display',
+            'date_joined'
         ]
         extra_kwargs = {
             'password': {'write_only': True},
             'user_type': {'read_only': True},
-            'email' : {'required': True},
+            'email': {'required': True},
         }
 
     def validate_email(self, value):

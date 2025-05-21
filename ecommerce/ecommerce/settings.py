@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework.authtoken',
     'drf_yasg',
+    'schema_viewer',
 ]
 
 REST_FRAMEWORK = {

@@ -38,7 +38,6 @@ class CartPermission(permissions.BasePermission):
         if request.method in permissions.SAFE_METHODS:
             return True
 
-        # För POST/PUT/DELETE, kräv antingen inloggning eller session
         return request.user.is_authenticated or request.session.session_key
 
 
@@ -69,3 +68,55 @@ class OrderPermission(permissions.BasePermission):
 
         # Skrivbehörighet: endast staff/superuser
         return request.user.user_type in [1, 2]
+
+
+class UserProfilePermission(permissions.BasePermission):
+    """
+    Custom permission for UserProfile:
+    - Safe methods (GET, HEAD, OPTIONS) allowed for all authenticated users
+    - PATCH allowed for profile owner or staff/superuser
+    - All other methods (POST, PUT, DELETE) disabled
+    """
+
+    def has_permission(self, request, view):
+        # Allow safe methods for authenticated users
+        if request.method in permissions.SAFE_METHODS:
+            return request.user.is_authenticated
+
+        # Only allow PATCH for profile updates
+        if request.method == 'PATCH':
+            return request.user.is_authenticated
+
+        # Block all other methods (POST, PUT, DELETE)
+        return False
+
+    def has_object_permission(self, request, view, obj):
+        # For safe methods, check if user is owner or staff/superuser
+        if request.method in permissions.SAFE_METHODS:
+            return obj.user == request.user or request.user.user_type in [1, 2]
+
+        # For PATCH, check if user is owner or staff/superuser
+        if request.method == 'PATCH':
+            return obj.user == request.user or request.user.user_type in [1, 2]
+
+        return False
+
+
+class UserAccessPermission(permissions.BasePermission):
+    """
+    Custom permission for User access:
+    - Customers can view and update their own profile (including password)
+    - Staff/superusers have full access
+    """
+
+    def has_permission(self, request, view):
+        # Alla autentiserade användare kan komma åt vyer för att se/uppdatera sig själva
+        return request.user.is_authenticated
+
+    def has_object_permission(self, request, view, obj):
+        # Staff/superusers har full åtkomst
+        if request.user.user_type in [1, 2]:
+            return True
+
+        # Customers kan bara komma åt sin egen användare
+        return obj == request.user
