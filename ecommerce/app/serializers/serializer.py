@@ -19,7 +19,27 @@ class ProductSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Product
-        fields = '__all__'
+        fields = ['product_id', 'product_name', 'price', 'product_info', 'categories']
+
+    def get_fields(self):
+        """ Stock is only for staff/superusers."""
+        fields = super().get_fields()
+        request = self.context.get('request')
+
+        if request and request.user.is_authenticated and request.user.user_type in [1, 2]:
+            fields['stock'] = serializers.IntegerField()
+
+        return fields
+
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        request = self.context.get('request')
+
+        if not (request and request.user.is_authenticated and request.user.user_type in [1, 2]):
+            representation['status'] = 'In stock' if instance.stock > 0 else 'Out of stock'
+            representation.pop('stock', None)
+
+        return representation
 
 class CategorySerializer(serializers.ModelSerializer):
     """

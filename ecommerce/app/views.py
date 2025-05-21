@@ -112,6 +112,12 @@ class CartViewSet(viewsets.ModelViewSet):
             print("Returning ANONYMOUS cart")
             return self.queryset.filter(session_key=session_key)
 
+    def create(self, request, *args, **kwargs):
+        """Allow POST only for staff/superusers with valid data"""
+        if not request.user.is_staff:
+            return Response({"detail": "Permission denied"}, status=403)
+
+
 class CartItemViewSet(viewsets.ModelViewSet):
     """
         API endpoint for managing cart items.
