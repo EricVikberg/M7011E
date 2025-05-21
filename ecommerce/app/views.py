@@ -8,14 +8,13 @@ from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.views import APIView
-from rest_framework.authentication import TokenAuthentication, SessionAuthentication
-
-from .decorators import allow_any, staff_or_superuser_required
+from rest_framework.authentication import TokenAuthentication
 from .models import Product, Cart, CartItem, Order, OrderItem, UserProfile, Category
 from .permissions import ReadOnlyOrStaff, CartPermission, OrderPermission, IsStaffOrSuperuser
-from .serializers.product_serializer import (ProductSerializer, CartSerializer, CartItemSerializer,
-                                             OrderSerializer, OrderItemSerializer, UserSerializer, LoginSerializer,
-                                             UserProfileSerializer, CategorySerializer)
+from .serializers.serializer import (ProductSerializer, CartSerializer, CartItemSerializer,
+                                     OrderSerializer, OrderItemSerializer, UserSerializer, LoginSerializer,
+                                     UserProfileSerializer, CategorySerializer)
+
 
 class UserProfileViewSet(viewsets.ModelViewSet):
     serializer_class = UserProfileSerializer
@@ -65,22 +64,43 @@ class UserProfileViewSet(viewsets.ModelViewSet):
 
 
 class ProductViewSet(viewsets.ModelViewSet):
+    """
+       API endpoint for managing products.
+
+       Permissions:
+       - Read operations allowed for all users
+       - Write operations require staff/superuser status
+    """
     queryset = Product.objects.all()
     serializer_class = ProductSerializer
     permission_classes = [ReadOnlyOrStaff]
 
 class CategoryViewSet(viewsets.ModelViewSet):
+    """
+        API endpoint for managing product categories.
+
+        Permissions:
+        - Read operations allowed for all users
+        - Write operations require staff/superuser status
+    """
     queryset = Category.objects.all()
     serializer_class = CategorySerializer  # You'll need to create this
     permission_classes = [ReadOnlyOrStaff]  # Only staff/superusers can access
 
 class CartViewSet(viewsets.ModelViewSet):
+    """
+        API endpoint for managing shopping carts.
+
+        Permissions:
+        - Read operations allowed for all (including anonymous users)
+        - Write operations require either authenticated user or valid session
+    """
     queryset = Cart.objects.all()
     serializer_class = CartSerializer
     permission_classes = [CartPermission]
 
-    # ccheck to see if user is logged in, or if in need of a session key-based cart
     def get_queryset(self):
+        """Return carts based on user/session"""
         if self.request.user.is_authenticated:
             print("Returning USER cart")
             return self.queryset.filter(user=self.request.user)
@@ -93,6 +113,13 @@ class CartViewSet(viewsets.ModelViewSet):
             return self.queryset.filter(session_key=session_key)
 
 class CartItemViewSet(viewsets.ModelViewSet):
+    """
+        API endpoint for managing cart items.
+
+        Permissions:
+        - Same as CartViewSet (inherits CartPermission)
+        - Validates stock availability before adding items
+    """
     serializer_class = CartItemSerializer
     queryset = CartItem.objects.select_related('product')
     authentication_classes = []  # Allow anonymous access
@@ -144,19 +171,32 @@ class CartItemViewSet(viewsets.ModelViewSet):
             serializer.instance = cart_item
 
 class OrderViewset(viewsets.ModelViewSet):
+    """
+       API endpoint for managing orders.
+
+       Permissions:
+       - Customers can create and view their own orders
+       - Staff/superusers can view all orders
+       - Only staff/superusers can modify/delete orders
+    """
     serializer_class = OrderSerializer
     queryset = Order.objects.prefetch_related('items__product')
     permission_classes = [OrderPermission]
 
     def get_queryset(self):
+        """Filter orders based on user permissions"""
         if self.request.user.is_authenticated:
-            if self.request.user.user_type in [1, 2]:  # Staff/superuser kan se alla
+            if self.request.user.user_type in [1, 2]:  # Staff/superuser can see all
                 return self.queryset.all()
             return self.queryset.filter(user=self.request.user)
         return self.queryset.none()
 
 
     def create(self, request, *args, **kwargs):
+        """
+                Create an order from cart contents.
+                Validates stock and processes order atomically.
+        """
         with transaction.atomic():
             cart = Cart.objects.get(user=request.user)
 
@@ -198,9 +238,15 @@ class OrderViewset(viewsets.ModelViewSet):
                 status=status.HTTP_201_CREATED
             )
 class CustomAuthToken(ObtainAuthToken):
+    """
+        Custom token authentication endpoint that:
+        - Returns user details along with token
+        - Merges anonymous cart with user cart on login
+    """
     serializer_class = LoginSerializer
 
     def post(self, request, *args, **kwargs):
+        """Authenticate user and return token with user data"""
         serializer = self.serializer_class(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data
@@ -221,7 +267,7 @@ class CustomAuthToken(ObtainAuthToken):
         })
 
     def merge_carts(self, request, user):
-        """Merge session-based cart with user cart on login"""
+        """Merge anonymous session cart with authenticated user cart"""
         session_key = request.session.session_key
         if not session_key:
             return
@@ -260,10 +306,15 @@ class CustomAuthToken(ObtainAuthToken):
                 pass
 
 class RegisterView(APIView):
+    """
+        API endpoint for user registration.
+        Creates both User and UserProfile with optional profile data.
+    """
     authentication_classes = []
     permission_classes = []
 
     def post(self, request):
+        """Register new user with optional profile data"""
         serializer = UserSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
@@ -289,3 +340,23 @@ class RegisterView(APIView):
                 'user' : UserSerializer(user).data,
             }, status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class LogoutView(APIView):
+    """
+        API endpoint for logging out users.
+
+        - Requires authentication
+        - Deletes the current user's token (logout)
+    """
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        try:
+            # Delete the user's current token
+            token = Token.objects.get(user=user)
+            token.delete()
+            return Response({"message": "Successfully logged out."}, status=status.HTTP_200_OK)
+        except Token.DoesNotExist:
+            return Response({"error": "Token not found."}, status=status.HTTP_400_BAD_REQUEST)
