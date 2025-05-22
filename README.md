@@ -38,5 +38,13 @@ The project includes a pre-configured SQLite database (`db.sqlite3`) containing:
 
 Start the development server with:
 
-```bash
+```bash```
 python manage.py runserver
+
+## Access Points
+
+The API will be available at:  
+[http://localhost:8000/](http://localhost:8000/)
+
+For full API documentation with interactive endpoints, visit:  
+[http://localhost:8000/swagger/](http://localhost:8000/swagger/)
