@@ -29,3 +29,14 @@ source .env/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
+
+## Database
+
+The project includes a pre-configured SQLite database (`db.sqlite3`) containing:
+
+## Running the Server
+
+Start the development server with:
+
+```bash
+python manage.py runserver
