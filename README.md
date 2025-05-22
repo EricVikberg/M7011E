@@ -13,7 +13,7 @@ A Django REST Framework-based e-commerce API with:
 ## Setup Instructions
 
 ### Prerequisites
-- Python 3.8+
+- Python 3.13.0+
 - pip
 - SQLite (included with Python)
 
