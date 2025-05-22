@@ -23,5 +23,9 @@ git clone <repository-url>
 cd ecommerce
 
 # Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+python -m venv .env
+source .env/bin/activate  
+# Windows: .env\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
