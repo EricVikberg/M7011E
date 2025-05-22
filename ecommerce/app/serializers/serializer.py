@@ -93,13 +93,12 @@ class CartItemSerializer(serializers.ModelSerializer):
     """
     product_name = serializers.CharField(source='product.name', read_only=True)
     product_price = serializers.CharField(source='product.price', read_only=True)
-    available_stock = serializers.SerializerMethodField()
     total_price = serializers.SerializerMethodField()
 
     class Meta:
         model = CartItem
         fields = ['id', 'product', 'product_name',
-                  'product_price', 'quantity', 'price', 'available_stock', 'total_price']
+                  'product_price', 'quantity', 'price', 'total_price']
         extra_kwargs = {'product':{'required':True},
                         'quantity':{'min_value':1},
                         'price':{'read_only':True}
